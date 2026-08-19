@@ -209,7 +209,7 @@ const CONFIG = {
   SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZlb2N5bHZkYW1vaW5mbWVjb3F0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxMjI1OTcsImV4cCI6MjEwMjY5ODU5N30.ajNgVXBG7UoT3TjrVtu_-_PIRY8yRcKHb5YnEhMlU9w",
 };
 
-const supabase = (CONFIG.SUPABASE_URL.startsWith("http"))
+const supabaseClient = (CONFIG.SUPABASE_URL.startsWith("http"))
   ? window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY)
   : null;
 
@@ -292,7 +292,7 @@ function stopPolling() {
    3. Supabase 헬퍼
    ============================================================ */
 async function createRoomRow(roomId) {
-  return supabase.from("rooms").insert({
+  return supabaseClient.from("rooms").insert({
     room_id: roomId,
     user_a_tags: [],
     user_a_completed: false,
@@ -305,12 +305,12 @@ async function createRoomRow(roomId) {
   });
 }
 async function fetchRoom(roomId) {
-  const { data, error } = await supabase.from("rooms").select("*").eq("room_id", roomId).single();
+  const { data, error } = await supabaseClient.from("rooms").select("*").eq("room_id", roomId).single();
   if (error) { console.error(error); return null; }
   return data;
 }
 async function updateRoom(roomId, patch) {
-  return supabase.from("rooms").update(patch).eq("room_id", roomId);
+  return supabaseClient.from("rooms").update(patch).eq("room_id", roomId);
 }
 
 /* ============================================================
@@ -571,7 +571,7 @@ async function onCreateRoom() {
 }
 
 async function boot() {
-  if (!supabase) { renderConfigWarning(); return; }
+  if (!supabaseClient) { renderConfigWarning(); return; }
 
   const roomId = getRoomIdFromPath();
   if (!roomId) { renderHome(); return; }
