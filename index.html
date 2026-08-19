@@ -533,6 +533,15 @@ function namesText(room) {
   return "우리";
 }
 
+// 한글 단어 끝 글자의 받침 유무에 따라 "이" 또는 "가"를 골라줍니다.
+function josaIGa(word) {
+  if (!word) return "가";
+  const code = word.charCodeAt(word.length - 1);
+  if (code < 0xac00 || code > 0xd7a3) return "가";
+  const hasBatchim = (code - 0xac00) % 28 !== 0;
+  return hasBatchim ? "이" : "가";
+}
+
 function renderNoMatch(roomId) {
   app.innerHTML = `
     <div class="center">
@@ -564,7 +573,7 @@ function renderResult(roomId, commonTags, menuName, room) {
       <h2>${namesText(room)}, 오늘 좀 통하는데?</h2>
       <div class="common-tags">${pills}</div>
       <div class="card-box">
-        <p class="sub" style="margin-bottom:6px;">이/가 당긴대!</p>
+        <p class="sub" style="margin-bottom:6px;">${namesText(room)}${josaIGa(namesText(room))} 당긴대!</p>
         <h1 style="margin:4px 0;">${menuName} 어때?</h1>
       </div>
       <button class="btn-primary" id="btnConfirm">이걸로 먹자!</button>
