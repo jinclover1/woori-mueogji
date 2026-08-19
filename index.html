@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>우리뭐먹지?</title>
+
+<!-- ============================================================
+  GA(Google Analytics) - 배포 가이드에 따라 아래 G-XXXXXXXXXX 를
+  실제 측정 ID로 교체하세요. (배포_가이드.md 6단계 참고)
+============================================================= -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-7W5FC4XFFH"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){ dataLayer.push(arguments); }
+  gtag('js', new Date());
+  gtag('config', 'G-7W5FC4XFFH');
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+  :root{
+    --primary:#FF6B4A;
+    --primary-light:#FFE7DE;
+    --bg:#FFF9F5;
+    --card:#FFFFFF;
+    --text:#2B2B2B;
+    --sub:#8A8A8A;
+    --border:#F0E4DE;
+    --radius:18px;
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0;
+    font-family:-apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Segoe UI", sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    display:flex;
+    justify-content:center;
+  }
+  #app{
+    width:100%;
+    max-width:430px;
+    min-height:100vh;
+    padding:28px 20px 40px;
+    display:flex;
+    flex-direction:column;
+  }
+  .center{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    align-items:center;
+    text-align:center;
+    gap:14px;
+  }
+  h1{ font-size:26px; margin:0 0 4px; }
+  h2{ font-size:20px; margin:0 0 4px; }
+  p.sub{ color:var(--sub); font-size:14px; margin:0 0 8px; line-height:1.5; }
+  .emoji-big{ font-size:56px; margin-bottom:6px; }
+
+  button{
+    font-family:inherit;
+    border:none;
+    cursor:pointer;
+  }
+  .btn-primary{
+    width:100%;
+    background:var(--primary);
+    color:#fff;
+    font-size:16px;
+    font-weight:700;
+    padding:16px;
+    border-radius:14px;
+    margin-top:8px;
+  }
+  .btn-primary:disabled{ background:#F3C9BC; cursor:not-allowed; }
+  .btn-secondary{
+    width:100%;
+    background:var(--card);
+    color:var(--primary);
+    font-size:15px;
+    font-weight:700;
+    padding:14px;
+    border-radius:14px;
+    border:2px solid var(--primary);
+    margin-top:10px;
+  }
+
+  .tag-group-title{
+    align-self:flex-start;
+    font-size:13px;
+    font-weight:700;
+    color:var(--sub);
+    margin:18px 0 8px;
+  }
+  .tag-grid{
+    display:grid;
+    grid-template-columns:repeat(3, 1fr);
+    gap:10px;
+    width:100%;
+  }
+  .tag-card{
+    background:var(--card);
+    border:2px solid var(--border);
+    border-radius:14px;
+    padding:14px 4px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:4px;
+    font-size:13px;
+    font-weight:600;
+    transition:all .15s ease;
+  }
+  .tag-card .icon{ font-size:24px; }
+  .tag-card.selected{
+    background:var(--primary-light);
+    border-color:var(--primary);
+    color:var(--primary);
+  }
+  .select-count{
+    margin-top:14px;
+    font-size:13px;
+    color:var(--sub);
+  }
+  .select-count.ok{ color:var(--primary); font-weight:700; }
+
+  .card-box{
+    width:100%;
+    background:var(--card);
+    border-radius:var(--radius);
+    padding:22px 18px;
+    text-align:center;
+    box-shadow:0 4px 14px rgba(0,0,0,0.04);
+  }
+  .link-box{
+    width:100%;
+    background:#F6F6F6;
+    border-radius:12px;
+    padding:12px 14px;
+    font-size:13px;
+    color:var(--sub);
+    word-break:break-all;
+    margin:10px 0 4px;
+    text-align:left;
+  }
+  .toast{
+    position:fixed;
+    bottom:30px;
+    left:50%;
+    transform:translateX(-50%);
+    background:#2B2B2B;
+    color:#fff;
+    padding:10px 18px;
+    border-radius:999px;
+    font-size:13px;
+    opacity:0;
+    transition:opacity .2s ease;
+    pointer-events:none;
+  }
+  .toast.show{ opacity:1; }
+
+  .spinner{
+    width:34px; height:34px;
+    border:4px solid var(--primary-light);
+    border-top-color:var(--primary);
+    border-radius:50%;
+    animation:spin 0.9s linear infinite;
+    margin-bottom:6px;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  .common-tags{
+    display:flex;
+    flex-wrap:wrap;
+    justify-content:center;
+    gap:6px;
+    margin:10px 0 4px;
+  }
+  .common-tag-pill{
+    background:var(--primary-light);
+    color:var(--primary);
+    font-size:12px;
+    font-weight:700;
+    padding:6px 12px;
+    border-radius:999px;
+  }
+  .footer-hint{
+    text-align:center;
+    color:var(--sub);
+    font-size:11px;
+    margin-top:18px;
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   0. 설정값 - 배포 가이드에 따라 아래 값을 채워주세요.
+   ============================================================ */
+const CONFIG = {
+  SUPABASE_URL: "https://veocylvdamoinfmecoqt.supabase.co",
+  SUPABASE_ANON_KEY: "PLACEHOLDER_ANON_KEY",
+};
+
+const supabase = (CONFIG.SUPABASE_URL.startsWith("http"))
+  ? window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY)
+  : null;
+
+/* ============================================================
+   1. 데이터 - 기획서 7,8번 항목 그대로 반영
+   ============================================================ */
+const TAGS = [
+  // 땡기는 느낌
+  { id: "rice",   emoji: "🍚", label: "밥",     group: "feel" },
+  { id: "noodle", emoji: "🍜", label: "면",     group: "feel" },
+  { id: "bread",  emoji: "🥖", label: "빵",     group: "feel" },
+  { id: "tteok",  emoji: "🍡", label: "떡",     group: "feel" },
+  { id: "meat",   emoji: "🥩", label: "고기",   group: "feel" },
+  { id: "soup",   emoji: "🍲", label: "국물",   group: "feel" },
+  { id: "spicy",  emoji: "🌶️", label: "매운맛", group: "feel" },
+  { id: "light",  emoji: "🥗", label: "가벼운", group: "feel" },
+  { id: "exotic", emoji: "🌏", label: "이국적인", group: "feel" },
+  // 음식 스타일
+  { id: "western",  emoji: "🍝", label: "양식", group: "style" },
+  { id: "korean",   emoji: "🥘", label: "한식", group: "style" },
+  { id: "japanese", emoji: "🍣", label: "일식", group: "style" },
+  { id: "chinese",  emoji: "🥡", label: "중식", group: "style" },
+];
+
+const MENUS = [
+  { name: "덮밥",     tags: ["rice"] },
+  { name: "볶음밥",   tags: ["rice"] },
+  { name: "초밥",     tags: ["rice", "light", "japanese"] },
+  { name: "포케",     tags: ["rice", "light"] },
+  { name: "라멘",     tags: ["noodle", "soup", "japanese"] },
+  { name: "짬뽕",     tags: ["noodle", "soup", "spicy", "chinese"] },
+  { name: "마라탕",   tags: ["noodle", "soup", "spicy", "exotic", "chinese"] },
+  { name: "쌀국수",   tags: ["noodle", "soup", "light", "exotic"] },
+  { name: "파스타",   tags: ["noodle", "exotic", "western"] },
+  { name: "떡볶이",   tags: ["tteok", "spicy", "korean"] },
+  { name: "햄버거",   tags: ["bread", "meat", "western"] },
+  { name: "샌드위치", tags: ["bread", "light", "western"] },
+  { name: "샤브샤브", tags: ["meat", "soup", "light", "korean"] },
+  { name: "찌개",     tags: ["rice", "soup", "korean"] },
+  { name: "구이",     tags: ["meat"] },
+  { name: "샐러드",   tags: ["light"] },
+  { name: "타코",     tags: ["bread", "meat", "exotic", "western"] },
+  { name: "카레",     tags: ["rice", "exotic"] },
+];
+
+const MIN_SELECT = 3;
+const POLL_MS = 2000;
+
+/* ============================================================
+   2. 상태 / 라우팅 유틸
+   ============================================================ */
+let pollTimer = null;
+let mySelectedTags = [];
+
+function getRoomIdFromPath() {
+  const m = location.pathname.match(/^\/room\/([A-Za-z0-9]+)/);
+  return m ? m[1] : null;
+}
+function generateRoomId() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let id = "";
+  for (let i = 0; i < 6; i++) id += chars[Math.floor(Math.random() * chars.length)];
+  return id;
+}
+function roleKey(roomId) { return "wmf_role_" + roomId; }
+function getRole(roomId) { return localStorage.getItem(roleKey(roomId)); }
+function setRole(roomId, role) { localStorage.setItem(roleKey(roomId), role); }
+
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 1600);
+}
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+/* ============================================================
+   3. Supabase 헬퍼
+   ============================================================ */
+async function createRoomRow(roomId) {
+  return supabase.from("rooms").insert({
+    room_id: roomId,
+    user_a_tags: [],
+    user_a_completed: false,
+    user_b_tags: [],
+    user_b_completed: false,
+    common_tags: [],
+    recommended_menu: null,
+    shown_menus: [],
+    final_decided: false,
+  });
+}
+async function fetchRoom(roomId) {
+  const { data, error } = await supabase.from("rooms").select("*").eq("room_id", roomId).single();
+  if (error) { console.error(error); return null; }
+  return data;
+}
+async function updateRoom(roomId, patch) {
+  return supabase.from("rooms").update(patch).eq("room_id", roomId);
+}
+
+/* ============================================================
+   4. 메뉴 추천 로직 (기획서 9,10번)
+   ============================================================ */
+function computeCommonTags(a, b) {
+  const setB = new Set(b);
+  return a.filter((t) => setB.has(t));
+}
+function candidateMenus(commonTags, excludeNames) {
+  if (!commonTags.length) return [];
+  const scored = MENUS.map((m) => {
+    const overlap = m.tags.filter((t) => commonTags.includes(t)).length;
+    return { menu: m, overlap };
+  }).filter((s) => s.overlap > 0);
+
+  if (!scored.length) return [];
+  const maxOverlap = Math.max(...scored.map((s) => s.overlap));
+  let top = scored.filter((s) => s.overlap === maxOverlap).map((s) => s.menu);
+
+  const notShown = top.filter((m) => !excludeNames.includes(m.name));
+  return notShown.length ? notShown : top; // 다 보여줬으면 처음부터 다시
+}
+function pickRandom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+/* ============================================================
+   5. 화면 렌더링
+   ============================================================ */
+const app = document.getElementById("app");
+
+function renderConfigWarning() {
+  app.innerHTML = `
+    <div class="center">
+      <div class="emoji-big">⚙️</div>
+      <h2>Supabase 설정이 필요해요</h2>
+      <p class="sub">index.html 상단의 CONFIG.SUPABASE_URL / SUPABASE_ANON_KEY 값을<br/>배포_가이드.md를 참고해 채워주세요.</p>
+    </div>`;
+}
+
+function renderHome() {
+  app.innerHTML = `
+    <div class="center">
+      <div class="emoji-big">🍚🍜</div>
+      <h1>우리뭐먹지?</h1>
+      <p class="sub">서로 눈치 보지 말고,<br/>각자 먹고 싶은 걸 먼저 고르자.</p>
+      <button class="btn-primary" id="btnCreate">같이 메뉴 고르기</button>
+    </div>`;
+  document.getElementById("btnCreate").onclick = onCreateRoom;
+}
+
+function renderInviteA(roomId) {
+  const link = location.origin + "/room/" + roomId;
+  app.innerHTML = `
+    <div class="center">
+      <div class="emoji-big">🔗</div>
+      <h2>친구 초대하기</h2>
+      <p class="sub">이 링크를 친구에게 보내면<br/>같이 메뉴를 고를 수 있어요.</p>
+      <div class="link-box">${link}</div>
+      <button class="btn-secondary" id="btnCopy">링크 복사하기</button>
+      <button class="btn-primary" id="btnGo">나도 고르러 가기</button>
+    </div>`;
+  document.getElementById("btnCopy").onclick = () => {
+    navigator.clipboard.writeText(link).then(() => showToast("링크를 복사했어요!"));
+  };
+  document.getElementById("btnGo").onclick = () => renderTagSelect(roomId, "A");
+}
+
+function renderWelcomeB(roomId) {
+  app.innerHTML = `
+    <div class="center">
+      <div class="emoji-big">👋</div>
+      <h2>초대를 받았어요!</h2>
+      <p class="sub">친구가 오늘 뭐 먹을지 같이 고르재요.<br/>내가 먹고 싶은 느낌을 골라볼까요?</p>
+      <button class="btn-primary" id="btnStart">메뉴 고르러 가기</button>
+    </div>`;
+  document.getElementById("btnStart").onclick = () => renderTagSelect(roomId, "B");
+}
+
+function renderTagSelect(roomId, role) {
+  mySelectedTags = [];
+  const feelTags = TAGS.filter((t) => t.group === "feel");
+  const styleTags = TAGS.filter((t) => t.group === "style");
+
+  app.innerHTML = `
+    <h2 style="text-align:center;">오늘 땡기는 음식?!</h2>
+    <p class="sub" style="text-align:center;">최소 3개 이상 골라주세요 (중복 가능)</p>
+
+    <div class="tag-group-title">땡기는 느낌</div>
+    <div class="tag-grid" id="feelGrid"></div>
+
+    <div class="tag-group-title">음식 스타일</div>
+    <div class="tag-grid" id="styleGrid"></div>
+
+    <div class="select-count" id="selectCount">0개 선택됨</div>
+    <button class="btn-primary" id="btnDone" disabled>선택 완료!</button>
+  `;
+
+  const feelGrid = document.getElementById("feelGrid");
+  const styleGrid = document.getElementById("styleGrid");
+
+  function renderCard(tag) {
+    const el = document.createElement("button");
+    el.className = "tag-card";
+    el.innerHTML = `<span class="icon">${tag.emoji}</span><span>${tag.label}</span>`;
+    el.onclick = () => {
+      const i = mySelectedTags.indexOf(tag.id);
+      if (i >= 0) { mySelectedTags.splice(i, 1); el.classList.remove("selected"); }
+      else { mySelectedTags.push(tag.id); el.classList.add("selected"); }
+      updateCount();
+    };
+    return el;
+  }
+  feelTags.forEach((t) => feelGrid.appendChild(renderCard(t)));
+  styleTags.forEach((t) => styleGrid.appendChild(renderCard(t)));
+
+  const countEl = document.getElementById("selectCount");
+  const btnDone = document.getElementById("btnDone");
+  function updateCount() {
+    const n = mySelectedTags.length;
+    countEl.textContent = n + "개 선택됨" + (n >= MIN_SELECT ? " ✔" : ` (최소 ${MIN_SELECT}개)`);
+    countEl.classList.toggle("ok", n >= MIN_SELECT);
+    btnDone.disabled = n < MIN_SELECT;
+  }
+
+  btnDone.onclick = async () => {
+    btnDone.disabled = true;
+    btnDone.textContent = "저장 중...";
+    const patch = role === "A"
+      ? { user_a_tags: mySelectedTags, user_a_completed: true }
+      : { user_b_tags: mySelectedTags, user_b_completed: true };
+    await updateRoom(roomId, patch);
+    renderWaiting(roomId, role);
+  };
+}
+
+function renderWaiting(roomId, role) {
+  app.innerHTML = `
+    <div class="center">
+      <div class="spinner"></div>
+      <h2>선택 완료!</h2>
+      <p class="sub">이제 친구가 고르는 중이에요.</p>
+    </div>`;
+  stopPolling();
+  pollTimer = setInterval(() => pollRoom(roomId, role), POLL_MS);
+  pollRoom(roomId, role);
+}
+
+async function pollRoom(roomId, role) {
+  const room = await fetchRoom(roomId);
+  if (!room) return;
+
+  if (!(room.user_a_completed && room.user_b_completed)) return; // 아직 둘 다 완료 안 됨
+
+  stopPolling();
+
+  // 아직 공통 태그/추천 메뉴가 계산되지 않았다면 이번에 계산해서 저장 (먼저 완료를 감지한 쪽이 계산)
+  if (!room.recommended_menu && (!room.common_tags || room.common_tags.length === 0)) {
+    const common = computeCommonTags(room.user_a_tags, room.user_b_tags);
+    if (!common.length) {
+      await updateRoom(roomId, { common_tags: [] });
+      renderNoMatch(roomId);
+      return;
+    }
+    const candidates = candidateMenus(common, []);
+    const picked = pickRandom(candidates);
+    await updateRoom(roomId, {
+      common_tags: common,
+      recommended_menu: picked.name,
+      shown_menus: [picked.name],
+    });
+    renderResult(roomId, common, picked.name);
+    return;
+  }
+
+  if (room.common_tags && room.common_tags.length === 0 && !room.recommended_menu) {
+    renderNoMatch(roomId);
+    return;
+  }
+  renderResult(roomId, room.common_tags, room.recommended_menu);
+}
+
+function renderNoMatch(roomId) {
+  app.innerHTML = `
+    <div class="center">
+      <div class="emoji-big">😅</div>
+      <h2>오늘은 입맛이 조금 다른가봐</h2>
+      <p class="sub">한 번만 다시 골라볼까?</p>
+      <button class="btn-primary" id="btnRetry">다시 골라보기</button>
+    </div>`;
+  document.getElementById("btnRetry").onclick = async () => {
+    await updateRoom(roomId, {
+      user_a_tags: [], user_a_completed: false,
+      user_b_tags: [], user_b_completed: false,
+      common_tags: [], recommended_menu: null, shown_menus: [],
+    });
+    const role = getRole(roomId);
+    renderTagSelect(roomId, role);
+  };
+}
+
+function renderResult(roomId, commonTags, menuName) {
+  const pills = commonTags.map((id) => {
+    const tag = TAGS.find((t) => t.id === id);
+    return `<span class="common-tag-pill">${tag ? tag.emoji + " " + tag.label : id}</span>`;
+  }).join("");
+
+  app.innerHTML = `
+    <div class="center">
+      <div class="emoji-big">🤝</div>
+      <h2>우리 오늘 좀 통하는데?</h2>
+      <div class="common-tags">${pills}</div>
+      <div class="card-box">
+        <p class="sub" style="margin-bottom:6px;">이/가 당긴대!</p>
+        <h1 style="margin:4px 0;">${menuName} 어때?</h1>
+      </div>
+      <button class="btn-primary" id="btnConfirm">이걸로 먹자!</button>
+      <button class="btn-secondary" id="btnAnother">다른 메뉴 보여줘</button>
+    </div>`;
+
+  document.getElementById("btnConfirm").onclick = async () => {
+    await updateRoom(roomId, { final_decided: true });
+    if (typeof gtag === "function") {
+      gtag("event", "menu_confirmed", { room_id: roomId, menu_name: menuName });
+    }
+    renderFinal(menuName);
+  };
+
+  document.getElementById("btnAnother").onclick = async () => {
+    const room = await fetchRoom(roomId);
+    const shown = room.shown_menus || [];
+    const candidates = candidateMenus(room.common_tags, shown);
+    const picked = pickRandom(candidates);
+    const newShown = shown.includes(picked.name) ? [picked.name] : [...shown, picked.name];
+    await updateRoom(roomId, { recommended_menu: picked.name, shown_menus: newShown });
+    renderResult(roomId, room.common_tags, picked.name);
+  };
+}
+
+function renderFinal(menuName) {
+  app.innerHTML = `
+    <div class="center">
+      <div class="emoji-big">🎉</div>
+      <h2>오늘 메뉴 결정!</h2>
+      <h1>오늘은 '${menuName}' 먹으러 가자!</h1>
+      <p class="footer-hint">우리뭐먹지? · 팀프로젝트88</p>
+    </div>`;
+}
+
+/* ============================================================
+   6. 방 생성 & 진입 라우팅
+   ============================================================ */
+async function onCreateRoom() {
+  const roomId = generateRoomId();
+  setRole(roomId, "A");
+  history.pushState({}, "", "/room/" + roomId);
+  await createRoomRow(roomId);
+  renderInviteA(roomId);
+}
+
+async function boot() {
+  if (!supabase) { renderConfigWarning(); return; }
+
+  const roomId = getRoomIdFromPath();
+  if (!roomId) { renderHome(); return; }
+
+  const room = await fetchRoom(roomId);
+  if (!room) { renderHome(); return; } // 잘못된 방 링크
+
+  let role = getRole(roomId);
+  if (!role) {
+    role = "B";
+    setRole(roomId, role);
+  }
+
+  // 이미 최종 결정까지 끝난 방에 재접속한 경우
+  if (room.final_decided && room.recommended_menu) {
+    renderFinal(room.recommended_menu);
+    return;
+  }
+
+  const myCompleted = role === "A" ? room.user_a_completed : room.user_b_completed;
+  const bothCompleted = room.user_a_completed && room.user_b_completed;
+
+  if (bothCompleted) {
+    if (room.recommended_menu) {
+      if (room.common_tags && room.common_tags.length) {
+        renderResult(roomId, room.common_tags, room.recommended_menu);
+      } else {
+        renderNoMatch(roomId);
+      }
+    } else if (room.common_tags && room.common_tags.length === 0) {
+      renderNoMatch(roomId);
+    } else {
+      renderWaiting(roomId, role); // 폴링하며 계산 위임
+    }
+    return;
+  }
+
+  if (myCompleted) { renderWaiting(roomId, role); return; }
+
+  if (role === "A") renderInviteA(roomId);
+  else renderWelcomeB(roomId);
+}
+
+window.addEventListener("popstate", boot);
+boot();
+</script>
+</body>
+</html>
