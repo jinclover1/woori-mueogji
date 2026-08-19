@@ -194,6 +194,21 @@
     font-size:11px;
     margin-top:18px;
   }
+  .name-input{
+    width:100%;
+    font-size:15px;
+    padding:14px;
+    border-radius:14px;
+    border:2px solid var(--border);
+    margin-top:6px;
+    font-family:inherit;
+    background:var(--card);
+    color:var(--text);
+  }
+  .name-input:focus{
+    outline:none;
+    border-color:var(--primary);
+  }
 </style>
 </head>
 <body>
@@ -275,8 +290,14 @@ function generateRoomId() {
   return id;
 }
 function roleKey(roomId) { return "wmf_role_" + roomId; }
-function getRole(roomId) { return localStorage.getItem(roleKey(roomId)); }
-function setRole(roomId, role) { localStorage.setItem(roleKey(roomId), role); }
+function nameKey(roomId) { return "wmf_name_" + roomId; }
+// sessionStorage는 탭(브라우저 세션)마다 독립적이라, 한 기기(브라우저)에서
+// 테스트용으로 탭 2개를 열어도 서로 다른 역할로 유지됩니다.
+// (localStorage를 쓰면 같은 브라우저의 모든 탭이 값을 공유해서 역할이 꼬입니다.)
+function getRole(roomId) { return sessionStorage.getItem(roleKey(roomId)); }
+function setRole(roomId, role) { sessionStorage.setItem(roleKey(roomId), role); }
+function getMyName(roomId) { return sessionStorage.getItem(nameKey(roomId)) || ""; }
+function setMyName(roomId, name) { sessionStorage.setItem(nameKey(roomId), name); }
 
 function showToast(msg) {
   const t = document.getElementById("toast");
@@ -296,8 +317,10 @@ async function createRoomRow(roomId) {
     room_id: roomId,
     user_a_tags: [],
     user_a_completed: false,
+    user_a_name: null,
     user_b_tags: [],
     user_b_completed: false,
+    user_b_name: null,
     common_tags: [],
     recommended_menu: null,
     shown_menus: [],
@@ -398,6 +421,9 @@ function renderTagSelect(roomId, role) {
     <h2 style="text-align:center;">오늘 땡기는 음식?!</h2>
     <p class="sub" style="text-align:center;">최소 3개 이상 골라주세요 (중복 가능)</p>
 
+    <div class="tag-group-title">내 이름</div>
+    <input class="name-input" id="nameInput" maxlength="10" placeholder="이름이나 별명을 알려주세요" />
+
     <div class="tag-group-title">땡기는 느낌</div>
     <div class="tag-grid" id="feelGrid"></div>
 
@@ -407,6 +433,10 @@ function renderTagSelect(roomId, role) {
     <div class="select-count" id="selectCount">0개 선택됨</div>
     <button class="btn-primary" id="btnDone" disabled>선택 완료!</button>
   `;
+
+  const nameInput = document.getElementById("nameInput");
+  nameInput.value = getMyName(roomId);
+  nameInput.oninput = updateCount;
 
   const feelGrid = document.getElementById("feelGrid");
   const styleGrid = document.getElementById("styleGrid");
@@ -430,17 +460,21 @@ function renderTagSelect(roomId, role) {
   const btnDone = document.getElementById("btnDone");
   function updateCount() {
     const n = mySelectedTags.length;
+    const hasName = nameInput.value.trim().length > 0;
     countEl.textContent = n + "개 선택됨" + (n >= MIN_SELECT ? " ✔" : ` (최소 ${MIN_SELECT}개)`);
     countEl.classList.toggle("ok", n >= MIN_SELECT);
-    btnDone.disabled = n < MIN_SELECT;
+    btnDone.disabled = n < MIN_SELECT || !hasName;
   }
+  updateCount();
 
   btnDone.onclick = async () => {
     btnDone.disabled = true;
     btnDone.textContent = "저장 중...";
+    const myName = nameInput.value.trim().slice(0, 10) || "친구";
+    setMyName(roomId, myName);
     const patch = role === "A"
-      ? { user_a_tags: mySelectedTags, user_a_completed: true }
-      : { user_b_tags: mySelectedTags, user_b_completed: true };
+      ? { user_a_tags: mySelectedTags, user_a_completed: true, user_a_name: myName }
+      : { user_b_tags: mySelectedTags, user_b_completed: true, user_b_name: myName };
     await updateRoom(roomId, patch);
     renderWaiting(roomId, role);
   };
@@ -481,7 +515,7 @@ async function pollRoom(roomId, role) {
       recommended_menu: picked.name,
       shown_menus: [picked.name],
     });
-    renderResult(roomId, common, picked.name);
+    renderResult(roomId, common, picked.name, room);
     return;
   }
 
@@ -489,7 +523,14 @@ async function pollRoom(roomId, role) {
     renderNoMatch(roomId);
     return;
   }
-  renderResult(roomId, room.common_tags, room.recommended_menu);
+  renderResult(roomId, room.common_tags, room.recommended_menu, room);
+}
+
+function namesText(room) {
+  const a = (room && room.user_a_name) || "";
+  const b = (room && room.user_b_name) || "";
+  if (a && b) return `${a}님과 ${b}님`;
+  return "우리";
 }
 
 function renderNoMatch(roomId) {
@@ -511,7 +552,7 @@ function renderNoMatch(roomId) {
   };
 }
 
-function renderResult(roomId, commonTags, menuName) {
+function renderResult(roomId, commonTags, menuName, room) {
   const pills = commonTags.map((id) => {
     const tag = TAGS.find((t) => t.id === id);
     return `<span class="common-tag-pill">${tag ? tag.emoji + " " + tag.label : id}</span>`;
@@ -520,7 +561,7 @@ function renderResult(roomId, commonTags, menuName) {
   app.innerHTML = `
     <div class="center">
       <div class="emoji-big">🤝</div>
-      <h2>우리 오늘 좀 통하는데?</h2>
+      <h2>${namesText(room)}, 오늘 좀 통하는데?</h2>
       <div class="common-tags">${pills}</div>
       <div class="card-box">
         <p class="sub" style="margin-bottom:6px;">이/가 당긴대!</p>
@@ -535,25 +576,26 @@ function renderResult(roomId, commonTags, menuName) {
     if (typeof gtag === "function") {
       gtag("event", "menu_confirmed", { room_id: roomId, menu_name: menuName });
     }
-    renderFinal(menuName);
+    renderFinal(menuName, room);
   };
 
   document.getElementById("btnAnother").onclick = async () => {
-    const room = await fetchRoom(roomId);
-    const shown = room.shown_menus || [];
-    const candidates = candidateMenus(room.common_tags, shown);
+    const freshRoom = await fetchRoom(roomId);
+    const shown = freshRoom.shown_menus || [];
+    const candidates = candidateMenus(freshRoom.common_tags, shown);
     const picked = pickRandom(candidates);
     const newShown = shown.includes(picked.name) ? [picked.name] : [...shown, picked.name];
     await updateRoom(roomId, { recommended_menu: picked.name, shown_menus: newShown });
-    renderResult(roomId, room.common_tags, picked.name);
+    renderResult(roomId, freshRoom.common_tags, picked.name, freshRoom);
   };
 }
 
-function renderFinal(menuName) {
+function renderFinal(menuName, room) {
   app.innerHTML = `
     <div class="center">
       <div class="emoji-big">🎉</div>
       <h2>오늘 메뉴 결정!</h2>
+      <p class="sub">${namesText(room)}</p>
       <h1>오늘은 '${menuName}' 먹으러 가자!</h1>
       <p class="footer-hint">우리뭐먹지? · 팀프로젝트88</p>
     </div>`;
@@ -587,7 +629,7 @@ async function boot() {
 
   // 이미 최종 결정까지 끝난 방에 재접속한 경우
   if (room.final_decided && room.recommended_menu) {
-    renderFinal(room.recommended_menu);
+    renderFinal(room.recommended_menu, room);
     return;
   }
 
@@ -597,7 +639,7 @@ async function boot() {
   if (bothCompleted) {
     if (room.recommended_menu) {
       if (room.common_tags && room.common_tags.length) {
-        renderResult(roomId, room.common_tags, room.recommended_menu);
+        renderResult(roomId, room.common_tags, room.recommended_menu, room);
       } else {
         renderNoMatch(roomId);
       }
