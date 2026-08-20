@@ -9,12 +9,12 @@
   GA(Google Analytics) - 배포 가이드에 따라 아래 G-XXXXXXXXXX 를
   실제 측정 ID로 교체하세요. (배포_가이드.md 6단계 참고)
 ============================================================= -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-7W5FC4XFFH"></script>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-1J5F5KK0PG"></script>
 <script>
   window.dataLayer = window.dataLayer || [];
   function gtag(){ dataLayer.push(arguments); }
   gtag('js', new Date());
-  gtag('config', 'G-7W5FC4XFFH');
+  gtag('config', 'G-1J5F5KK0PG');
 </script>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -502,6 +502,7 @@ async function pollRoom(roomId, role) {
 
   // 아직 공통 태그/추천 메뉴가 계산되지 않았다면 이번에 계산해서 저장 (먼저 완료를 감지한 쪽이 계산)
   if (!room.recommended_menu && (!room.common_tags || room.common_tags.length === 0)) {
+    if (typeof gtag === "function") gtag("event", "both_submitted", { room_id: roomId });
     const common = computeCommonTags(room.user_a_tags, room.user_b_tags);
     if (!common.length) {
       await updateRoom(roomId, { common_tags: [] });
@@ -543,6 +544,8 @@ function josaIGa(word) {
 }
 
 function renderNoMatch(roomId) {
+  stopPolling();
+  if (typeof gtag === "function") gtag("event", "match_fail", { room_id: roomId });
   app.innerHTML = `
     <div class="center">
       <div class="emoji-big">😅</div>
@@ -562,6 +565,9 @@ function renderNoMatch(roomId) {
 }
 
 function renderResult(roomId, commonTags, menuName, room) {
+  stopPolling();
+  if (typeof gtag === "function") gtag("event", "view_result", { room_id: roomId });
+
   const pills = commonTags.map((id) => {
     const tag = TAGS.find((t) => t.id === id);
     return `<span class="common-tag-pill">${tag ? tag.emoji + " " + tag.label : id}</span>`;
@@ -581,6 +587,7 @@ function renderResult(roomId, commonTags, menuName, room) {
     </div>`;
 
   document.getElementById("btnConfirm").onclick = async () => {
+    stopPolling();
     await updateRoom(roomId, { final_decided: true });
     if (typeof gtag === "function") {
       gtag("event", "menu_confirmed", { room_id: roomId, menu_name: menuName });
@@ -589,6 +596,7 @@ function renderResult(roomId, commonTags, menuName, room) {
   };
 
   document.getElementById("btnAnother").onclick = async () => {
+    if (typeof gtag === "function") gtag("event", "reroll_menu", { room_id: roomId });
     const freshRoom = await fetchRoom(roomId);
     const shown = freshRoom.shown_menus || [];
     const candidates = candidateMenus(freshRoom.common_tags, shown);
@@ -597,9 +605,25 @@ function renderResult(roomId, commonTags, menuName, room) {
     await updateRoom(roomId, { recommended_menu: picked.name, shown_menus: newShown });
     renderResult(roomId, freshRoom.common_tags, picked.name, freshRoom);
   };
+
+  // 상대방이 "다른 메뉴 보여줘"나 "이걸로 먹자!"를 눌러도 내 화면이 자동으로 같은 결과로 맞춰지도록
+  // 결과 화면에서도 계속 폴링합니다. (안 그러면 둘이 각자 다른 메뉴를 보게 됨)
+  pollTimer = setInterval(async () => {
+    const latest = await fetchRoom(roomId);
+    if (!latest) return;
+    if (latest.final_decided) {
+      stopPolling();
+      renderFinal(latest.recommended_menu, latest);
+      return;
+    }
+    if (latest.recommended_menu && latest.recommended_menu !== menuName) {
+      renderResult(roomId, latest.common_tags, latest.recommended_menu, latest);
+    }
+  }, POLL_MS);
 }
 
 function renderFinal(menuName, room) {
+  stopPolling();
   app.innerHTML = `
     <div class="center">
       <div class="emoji-big">🎉</div>
@@ -618,6 +642,7 @@ async function onCreateRoom() {
   setRole(roomId, "A");
   history.pushState({}, "", "/room/" + roomId);
   await createRoomRow(roomId);
+  if (typeof gtag === "function") gtag("event", "create_room", { room_id: roomId });
   renderInviteA(roomId);
 }
 
@@ -634,6 +659,7 @@ async function boot() {
   if (!role) {
     role = "B";
     setRole(roomId, role);
+    if (typeof gtag === "function") gtag("event", "join_room", { room_id: roomId });
   }
 
   // 이미 최종 결정까지 끝난 방에 재접속한 경우
