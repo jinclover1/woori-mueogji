@@ -270,7 +270,9 @@ const MENUS = [
   { name: "카레",     tags: ["rice", "exotic"] },
 ];
 
-const MIN_SELECT = 3;
+const MIN_FEEL = 3;
+const MIN_STYLE = 2;
+const MAX_REROLL = 3;
 const POLL_MS = 2000;
 
 /* ============================================================
@@ -325,6 +327,8 @@ async function createRoomRow(roomId) {
     recommended_menu: null,
     shown_menus: [],
     final_decided: false,
+    reroll_count: 0,
+    b_joined: false,
   });
 }
 async function fetchRoom(roomId) {
@@ -392,8 +396,8 @@ function renderInviteA(roomId) {
       <h2>친구 초대하기</h2>
       <p class="sub">이 링크를 친구에게 보내면<br/>같이 메뉴를 고를 수 있어요.</p>
       <div class="link-box">${link}</div>
-      <button class="btn-secondary" id="btnCopy">링크 복사하기</button>
-      <button class="btn-primary" id="btnGo">나도 고르러 가기</button>
+      <button class="btn-primary" id="btnCopy">링크 복사하기</button>
+      <button class="btn-secondary" id="btnGo">나도 고르러 가기</button>
     </div>`;
   document.getElementById("btnCopy").onclick = () => {
     navigator.clipboard.writeText(link).then(() => showToast("링크를 복사했어요!"));
@@ -419,15 +423,15 @@ function renderTagSelect(roomId, role) {
 
   app.innerHTML = `
     <h2 style="text-align:center;">오늘 땡기는 음식?!</h2>
-    <p class="sub" style="text-align:center;">최소 3개 이상 골라주세요 (중복 가능)</p>
+    <p class="sub" style="text-align:center;">느낌 최소 ${MIN_FEEL}개, 스타일 최소 ${MIN_STYLE}개를 골라주세요 (중복 가능)</p>
 
     <div class="tag-group-title">내 이름</div>
     <input class="name-input" id="nameInput" maxlength="10" placeholder="이름이나 별명을 알려주세요" />
 
-    <div class="tag-group-title">땡기는 느낌</div>
+    <div class="tag-group-title" id="feelTitle">땡기는 느낌</div>
     <div class="tag-grid" id="feelGrid"></div>
 
-    <div class="tag-group-title">음식 스타일</div>
+    <div class="tag-group-title" id="styleTitle">음식 스타일</div>
     <div class="tag-grid" id="styleGrid"></div>
 
     <div class="select-count" id="selectCount">0개 선택됨</div>
@@ -458,12 +462,24 @@ function renderTagSelect(roomId, role) {
 
   const countEl = document.getElementById("selectCount");
   const btnDone = document.getElementById("btnDone");
+  const feelTitleEl = document.getElementById("feelTitle");
+  const styleTitleEl = document.getElementById("styleTitle");
+  const feelIds = feelTags.map((t) => t.id);
+  const styleIds = styleTags.map((t) => t.id);
   function updateCount() {
-    const n = mySelectedTags.length;
+    const feelCount = mySelectedTags.filter((id) => feelIds.includes(id)).length;
+    const styleCount = mySelectedTags.filter((id) => styleIds.includes(id)).length;
+    const feelOk = feelCount >= MIN_FEEL;
+    const styleOk = styleCount >= MIN_STYLE;
     const hasName = nameInput.value.trim().length > 0;
-    countEl.textContent = n + "개 선택됨" + (n >= MIN_SELECT ? " ✔" : ` (최소 ${MIN_SELECT}개)`);
-    countEl.classList.toggle("ok", n >= MIN_SELECT);
-    btnDone.disabled = n < MIN_SELECT || !hasName;
+
+    feelTitleEl.textContent = `땡기는 느낌 (${feelCount}/${MIN_FEEL})` + (feelOk ? " ✔" : "");
+    styleTitleEl.textContent = `음식 스타일 (${styleCount}/${MIN_STYLE})` + (styleOk ? " ✔" : "");
+
+    const allOk = feelOk && styleOk;
+    countEl.textContent = allOk ? "선택 완료! ✔" : "느낌과 스타일을 각각 최소 개수만큼 골라주세요";
+    countEl.classList.toggle("ok", allOk);
+    btnDone.disabled = !allOk || !hasName;
   }
   updateCount();
 
@@ -516,7 +532,8 @@ async function pollRoom(roomId, role) {
       recommended_menu: picked.name,
       shown_menus: [picked.name],
     });
-    renderResult(roomId, common, picked.name, room);
+    if (typeof gtag === "function") gtag("event", "view_result", { room_id: roomId });
+    renderResult(roomId, common, picked.name, { ...room, reroll_count: 0 });
     return;
   }
 
@@ -524,6 +541,7 @@ async function pollRoom(roomId, role) {
     renderNoMatch(roomId);
     return;
   }
+  if (typeof gtag === "function") gtag("event", "view_result", { room_id: roomId });
   renderResult(roomId, room.common_tags, room.recommended_menu, room);
 }
 
@@ -558,6 +576,7 @@ function renderNoMatch(roomId) {
       user_a_tags: [], user_a_completed: false,
       user_b_tags: [], user_b_completed: false,
       common_tags: [], recommended_menu: null, shown_menus: [],
+      reroll_count: 0,
     });
     const role = getRole(roomId);
     renderTagSelect(roomId, role);
@@ -566,12 +585,21 @@ function renderNoMatch(roomId) {
 
 function renderResult(roomId, commonTags, menuName, room) {
   stopPolling();
-  if (typeof gtag === "function") gtag("event", "view_result", { room_id: roomId });
 
   const pills = commonTags.map((id) => {
     const tag = TAGS.find((t) => t.id === id);
     return `<span class="common-tag-pill">${tag ? tag.emoji + " " + tag.label : id}</span>`;
   }).join("");
+
+  const rerollCount = (room && room.reroll_count) || 0;
+  const poolSize = candidateMenus(commonTags, []).length;
+  const capReached = rerollCount >= MAX_REROLL;
+  const poolExhausted = poolSize <= 1;
+  const canReroll = !capReached && !poolExhausted;
+
+  const rerollButtonHtml = canReroll
+    ? `<button class="btn-secondary" id="btnAnother">다른 메뉴 보여줘</button>`
+    : `<p class="sub" style="margin-top:10px;">더 이상 고민은 사치! 오늘은 이 메뉴로 확정 🙌</p>`;
 
   app.innerHTML = `
     <div class="center">
@@ -583,7 +611,7 @@ function renderResult(roomId, commonTags, menuName, room) {
         <h1 style="margin:4px 0;">${menuName} 어때?</h1>
       </div>
       <button class="btn-primary" id="btnConfirm">이걸로 먹자!</button>
-      <button class="btn-secondary" id="btnAnother">다른 메뉴 보여줘</button>
+      ${rerollButtonHtml}
     </div>`;
 
   document.getElementById("btnConfirm").onclick = async () => {
@@ -595,16 +623,24 @@ function renderResult(roomId, commonTags, menuName, room) {
     renderFinal(menuName, room);
   };
 
-  document.getElementById("btnAnother").onclick = async () => {
-    if (typeof gtag === "function") gtag("event", "reroll_menu", { room_id: roomId });
-    const freshRoom = await fetchRoom(roomId);
-    const shown = freshRoom.shown_menus || [];
-    const candidates = candidateMenus(freshRoom.common_tags, shown);
-    const picked = pickRandom(candidates);
-    const newShown = shown.includes(picked.name) ? [picked.name] : [...shown, picked.name];
-    await updateRoom(roomId, { recommended_menu: picked.name, shown_menus: newShown });
-    renderResult(roomId, freshRoom.common_tags, picked.name, freshRoom);
-  };
+  const btnAnother = document.getElementById("btnAnother");
+  if (btnAnother) {
+    btnAnother.onclick = async () => {
+      if (typeof gtag === "function") gtag("event", "reroll_menu", { room_id: roomId });
+      const freshRoom = await fetchRoom(roomId);
+      const shown = freshRoom.shown_menus || [];
+      const candidates = candidateMenus(freshRoom.common_tags, shown);
+      const picked = pickRandom(candidates);
+      const newShown = shown.includes(picked.name) ? [picked.name] : [...shown, picked.name];
+      const newRerollCount = (freshRoom.reroll_count || 0) + 1;
+      await updateRoom(roomId, {
+        recommended_menu: picked.name,
+        shown_menus: newShown,
+        reroll_count: newRerollCount,
+      });
+      renderResult(roomId, freshRoom.common_tags, picked.name, { ...freshRoom, reroll_count: newRerollCount });
+    };
+  }
 
   // 상대방이 "다른 메뉴 보여줘"나 "이걸로 먹자!"를 눌러도 내 화면이 자동으로 같은 결과로 맞춰지도록
   // 결과 화면에서도 계속 폴링합니다. (안 그러면 둘이 각자 다른 메뉴를 보게 됨)
@@ -659,7 +695,11 @@ async function boot() {
   if (!role) {
     role = "B";
     setRole(roomId, role);
-    if (typeof gtag === "function") gtag("event", "join_room", { room_id: roomId });
+    if (!room.b_joined) {
+      if (typeof gtag === "function") gtag("event", "join_room", { room_id: roomId });
+      await updateRoom(roomId, { b_joined: true });
+      room.b_joined = true;
+    }
   }
 
   // 이미 최종 결정까지 끝난 방에 재접속한 경우
@@ -674,6 +714,7 @@ async function boot() {
   if (bothCompleted) {
     if (room.recommended_menu) {
       if (room.common_tags && room.common_tags.length) {
+        if (typeof gtag === "function") gtag("event", "view_result", { room_id: roomId });
         renderResult(roomId, room.common_tags, room.recommended_menu, room);
       } else {
         renderNoMatch(roomId);
